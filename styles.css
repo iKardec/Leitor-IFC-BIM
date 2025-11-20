@@ -11,15 +11,6 @@ body {
     background: linear-gradient(135deg, #0e1117 0%, #1a1f2e 100%);
 }
 
-.logo {
-    position: relative ;
-    width: 30px;
-    height: 30px;
-    margin-top: 20px;
-    box-shadow: #ffffff7e;
-}
-
-
 #viewer { 
     width: 100vw; 
     height: 100vh;
@@ -36,11 +27,29 @@ body {
     gap: 15px;
 }
 
+#subtitle2 {
+    color: rgba(255, 255, 255, 0.7);
+    position: relative;
+    bottom: 20px;
+    margin-bottom: -20px;
+    font-size: 12px;
+}
+
+.logo {
+    position: relative ;
+    width: 30px;
+    height: 30px;
+    background-color: transparent;
+    margin-top: 20px;
+}
+
 #title { 
     color: white; 
     font-size: 28px; 
     font-weight: bold;
-    margin-bottom: 1px; 
+    margin-bottom: 5px; 
+    text-shadow: 0 0 20px rgba(207, 207, 207, 0.8),
+                0 0 40px rgba(158, 158, 158, 0.4);
     letter-spacing: 1px;
 }
 
@@ -48,14 +57,6 @@ body {
     color: rgba(255, 255, 255, 0.7);
     font-size: 14px;
     margin-bottom: 10px;
-}
-
-#subtitle2 {
-    color: rgba(255, 255, 255, 0.7);
-    position: relative;
-    bottom: 20px;
-    margin-bottom: -20px;
-    font-size: 12px;
 }
 
 .file-input-wrapper {
@@ -175,22 +176,115 @@ body {
     transition: width 0.3s ease;
 }
 
-.footer {
-  background: var(--deep-black);
-  color: var(--text-light);
-  text-align: center;
-  padding: 1.5rem;
-  margin-top: 3rem;
-  border-top: 2px solid var(--primary-orange);
+/* ========== RESPONSIVO MOBILE ========== */
+@media (max-width: 768px) {
+    #ui {
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        padding: 15px;
+        background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.9) 20%);
+        align-items: center;
+        text-align: center;
+        gap: 10px;
+    }
+    
+    #title {
+        font-size: 20px;
+        margin-bottom: 3px;
+    }
+    
+    #subtitle {
+        font-size: 11px;
+        margin-bottom: 8px;
+    }
+    
+    .file-input-label {
+        padding: 12px 24px;
+        font-size: 14px;
+    }
+    
+    #info {
+        max-width: 90%;
+        font-size: 11px;
+        padding: 10px 12px;
+        line-height: 1.4;
+    }
+    
+    /* Instruções simplificadas para mobile */
+    #info br {
+        display: none;
+    }
+    
+    #info strong::after {
+        content: " ";
+    }
+    
+    #info {
+        text-align: center;
+    }
+    
+    #stats {
+        bottom: auto;
+        top: 10px;
+        left: 10px;
+        font-size: 10px;
+        padding: 8px 12px;
+    }
+    
+    #loading {
+        padding: 20px 30px;
+        font-size: 16px;
+    }
+    
+    .spinner {
+        width: 30px;
+        height: 30px;
+    }
 }
 
-.footer p {
-  font-family: 'Urbanist', sans-serif;
-  margin: 0.3rem 0;
-  font-size: 0.95rem;
+/* Mobile pequeno (iPhone SE, etc) */
+@media (max-width: 400px) {
+    #title {
+        font-size: 18px;
+    }
+    
+    #subtitle {
+        font-size: 10px;
+    }
+    
+    .file-input-label {
+        padding: 10px 20px;
+        font-size: 13px;
+    }
+    
+    #info {
+        font-size: 10px;
+        padding: 8px 10px;
+    }
 }
 
-.footer-location {
-  color: var(--light-orange);
-  font-size: 0.9rem;
+/* Landscape mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+    #ui {
+        flex-direction: row;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        padding: 10px;
+    }
+    
+    #title {
+        font-size: 16px;
+    }
+    
+    #subtitle {
+        display: none;
+    }
+    
+    #info {
+        font-size: 10px;
+        max-width: 200px;
+    }
 }

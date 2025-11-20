@@ -1,4 +1,3 @@
-// script.js - Versão Atualizada com Extração de Estilos IFC
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { IFCLoader } from 'web-ifc-three';
@@ -79,7 +78,7 @@ const light4 = new THREE.DirectionalLight(0x8899ff, 0.2);
 light4.position.set(0, -20, 0);
 scene.add(light4);
 
-// IFC Loader - Configuração aprimorada
+// IFC Loader
 const ifcLoader = new IFCLoader();
 let ifcAPI = null;
 
@@ -91,21 +90,12 @@ try {
             ifcLoader.ifcManager.setupThreeMeshBVH();
         }
         
-        // Aplica configurações para melhor extração de dados
-        ifcLoader.ifcManager.applyWebIfcConfig({
-            USE_FAST_BOOLS: true,
-            DISCARD_DOWN_PARALLEL_LINES: true,
-            CIRCLE_SEGMENTS_LOW: 8,
-            CIRCLE_SEGMENTS_MEDIUM: 16,
-            CIRCLE_SEGMENTS_HIGH: 32,
-        });
-        
-        // Guarda referência da API IFC
+        // Guarda referência da API IFC para extrair propriedades
         ifcAPI = ifcLoader.ifcManager;
         
-        console.log('✅ WASM path configurado e configurações aplicadas');
+        console.log('✅ WASM path configurado');
     } else {
-        console.log('⚠️ ifcManager não disponível');
+        console.log('⚠️ ifcManager não disponível, usando fallback');
     }
 } catch (e) {
     console.log('⚠️ Erro ao configurar WASM:', e.message);
@@ -199,6 +189,7 @@ async function getIFCProperties(modelID, expressID) {
     if (!ifcAPI || !modelID) return null;
     
     try {
+        // Tenta obter propriedades do elemento
         const props = await ifcAPI.getItemProperties(modelID, expressID, true);
         return props;
     } catch (e) {
@@ -218,133 +209,60 @@ async function getIFCType(modelID, expressID) {
     }
 }
 
-// Função para obter estilos visuais do IFC
-async function getVisualStyleFromIFC(modelID, expressID) {
-    if (!ifcAPI) return null;
-
-    try {
-        const styledItems = await ifcAPI.getAllItemsOfType(modelID, ifcAPI.IFCSTYLEDITEM, false);
-        for (const item of styledItems) {
-            const styledItem = await ifcAPI.getItemProperties(modelID, item.expressID, false);
-            if (styledItem.Item && styledItem.Item.value === expressID) {
-                if (styledItem.Styles && styledItem.Styles.length > 0) {
-                    const styleId = styledItem.Styles[0].value;
-                    return await getStyleProperties(modelID, styleId);
-                }
-            }
-        }
-
-        const product = await ifcAPI.getItemProperties(modelID, expressID, false);
-        if (product.Representation) {
-            const repId = product.Representation.value;
-            const representation = await ifcAPI.getItemProperties(modelID, repId, false);
-            if (representation.Representations && representation.Representations.length > 0) {
-                for (const repItem of representation.Representations) {
-                    const repItemDetails = await ifcAPI.getItemProperties(modelID, repItem.value, false);
-                    if (repItemDetails.Items) {
-                        for (const itemRef of repItemDetails.Items) {
-                            const itemRefDetails = await ifcAPI.getItemProperties(modelID, itemRef.value, false);
-                            if (itemRefDetails.StyledByItem) {
-                                const styleId = itemRefDetails.StyledByItem.value;
-                                return await getStyleProperties(modelID, styleId);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.warn('⚠️ Erro ao buscar estilos visuais para ID', expressID, ':', e.message);
-    }
-    return null;
-}
-
-// Função auxiliar para extrair propriedades de estilo
-async function getStyleProperties(modelID, styleID) {
-    if (!ifcAPI) return null;
-
-    try {
-        const style = await ifcAPI.getItemProperties(modelID, styleID, false);
-        if (style && style.Styles) {
-            for (const subStyleRef of style.Styles) {
-                const subStyle = await ifcAPI.getItemProperties(modelID, subStyleRef.value, false);
-                
-                if (subStyle.type === 'IfcSurfaceStyle') {
-                    if (subStyle.Styles && subStyle.Styles.length > 0) {
-                        for (const styleElementRef of subStyle.Styles) {
-                            const styleElement = await ifcAPI.getItemProperties(modelID, styleElementRef.value, false);
-                            
-                            if (styleElement.type === 'IfcSurfaceStyleRendering') {
-                                return {
-                                    color: styleElement.SurfaceColour,
-                                    transparency: styleElement.Transparency ? parseFloat(styleElement.Transparency.value) : 0,
-                                    diffuse: styleElement.DiffuseColour,
-                                    specular: styleElement.SpecularColour,
-                                    reflection: styleElement.ReflectionColour,
-                                    specularHighlight: styleElement.SpecularHighlight
-                                };
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.warn('⚠️ Erro ao extrair propriedades de estilo para ID', styleID, ':', e.message);
-    }
-    return null;
-}
-
-// Função para converter cor IFC para THREE.Color
-function ifcColorToThreeColor(ifcColor) {
-    if (!ifcColor) return null;
-    if (ifcColor.Red !== undefined && ifcColor.Green !== undefined && ifcColor.Blue !== undefined) {
-        const r = parseFloat(ifcColor.Red.value) || 0;
-        const g = parseFloat(ifcColor.Green.value) || 0;
-        const b = parseFloat(ifcColor.Blue.value) || 0;
-        return new THREE.Color(r, g, b);
-    }
-    return null;
-}
-
 // Mapeamento de tipos IFC para materiais padrão
 const ifcTypeMaterialDefaults = {
+    // Paredes
     'IFCWALL': { color: 0xe0e0e0, metalness: 0.0, roughness: 0.8 },
     'IFCWALLSTANDARDCASE': { color: 0xd4d4d4, metalness: 0.0, roughness: 0.8 },
+    
+    // Pisos/Lajes
     'IFCSLAB': { color: 0xcccccc, metalness: 0.1, roughness: 0.6 },
     'IFCSLABSTANDARDCASE': { color: 0xc0c0c0, metalness: 0.1, roughness: 0.6 },
+    
+    // Portas e Janelas
     'IFCDOOR': { color: 0x8b4513, metalness: 0.2, roughness: 0.7 },
     'IFCWINDOW': { color: 0x87ceeb, metalness: 0.3, roughness: 0.2, transparent: true, opacity: 0.5 },
+    
+    // Móveis
     'IFCFURNISHINGELEMENT': { color: 0xa0522d, metalness: 0.2, roughness: 0.6 },
     'IFCFURNITURE': { color: 0xa0522d, metalness: 0.2, roughness: 0.6 },
+    
+    // Estruturas
     'IFCBEAM': { color: 0x808080, metalness: 0.3, roughness: 0.5 },
     'IFCCOLUMN': { color: 0x696969, metalness: 0.3, roughness: 0.5 },
+    
+    // Cobertura
     'IFCROOF': { color: 0x8b0000, metalness: 0.1, roughness: 0.8 },
+    
+    // Escadas
     'IFCSTAIR': { color: 0xb8b8b8, metalness: 0.2, roughness: 0.7 },
     'IFCRAILING': { color: 0x4682b4, metalness: 0.6, roughness: 0.3 },
+    
+    // Equipamentos
     'IFCBUILDINGELEMENTPROXY': { color: 0xdcdcdc, metalness: 0.1, roughness: 0.7 },
+    
+    // Default
     'DEFAULT': { color: 0xcccccc, metalness: 0.1, roughness: 0.7 }
 };
 
-// Função MELHORADA para processar com propriedades IFC e estilos visuais
-// Função CORRIGIDA para processar com propriedades IFC e estilos visuais
+// Função MELHORADA para processar com propriedades IFC
 async function processAllMeshesWithIFC(object, modelID, depth = 0) {
     const indent = '  '.repeat(depth);
     
+    // Processa se for Mesh
     if (object.isMesh) {
         const expressID = object.userData?.expressID || object.expressID;
         
         console.log(`${indent}🔍 Mesh: ${object.name || 'sem nome'} | ExpressID: ${expressID}`);
         
+        // Tenta obter propriedades IFC
         let ifcProps = null;
         let ifcType = null;
         let ifcTypeName = 'UNKNOWN';
-        let visualStyle = null;
         
         if (expressID && modelID) {
             ifcProps = await getIFCProperties(modelID, expressID);
             ifcType = await getIFCType(modelID, expressID);
-            visualStyle = await getVisualStyleFromIFC(modelID, expressID);
             
             if (ifcType && ifcType.type) {
                 ifcTypeName = ifcType.type;
@@ -354,91 +272,103 @@ async function processAllMeshesWithIFC(object, modelID, depth = 0) {
             if (ifcProps) {
                 console.log(`${indent}  📄 Propriedades:`, ifcProps);
             }
-            
-            if (visualStyle) {
-                console.log(`${indent}  🎨 Estilo Visual:`, visualStyle);
-            }
         }
         
         if (object.material) {
             const materials = Array.isArray(object.material) ? object.material : [object.material];
             
             const newMaterials = materials.map((mat, idx) => {
-                // Começa com o material original carregado pelo IFCLoader
-                let newMat = mat;
+                // Extrai cor original
+                let materialColor = new THREE.Color();
                 
-                // Se o material original não for um MeshStandardMaterial, convertemos para um
-                // Isso é necessário para aplicar cores e transparência de forma consistente
-                if (!(mat instanceof THREE.MeshStandardMaterial)) {
-                     newMat = new THREE.MeshStandardMaterial();
-                     // Copia propriedades relevantes do material original
-                     if (mat.color) newMat.color.copy(mat.color);
-                     if (mat.map) newMat.map = mat.map;
-                     if (mat.normalMap) newMat.normalMap = mat.normalMap;
-                     if (mat.roughnessMap) newMat.roughnessMap = mat.roughnessMap;
-                     if (mat.metalnessMap) newMat.metalnessMap = mat.metalnessMap;
-                     if (mat.aoMap) newMat.aoMap = mat.aoMap;
-                     if (mat.bumpMap) newMat.bumpMap = mat.bumpMap;
-                     if (mat.emissive) newMat.emissive.copy(mat.emissive);
-                     if (mat.transparent !== undefined) newMat.transparent = mat.transparent;
-                     if (mat.opacity !== undefined) newMat.opacity = mat.opacity;
-                     newMat.side = THREE.DoubleSide;
-                     newMat.flatShading = false;
-                     newMat.vertexColors = false;
-                     newMat.envMapIntensity = 0.5;
-                }
-                
-                // 1. Aplica cor do estilo visual IFC, se disponível
-                if (visualStyle && visualStyle.color) {
-                    const styleColor = ifcColorToThreeColor(visualStyle.color);
-                    if (styleColor) {
-                        newMat.color.copy(styleColor);
-                        console.log(`${indent}  🎨 Aplicando cor do estilo IFC: #${newMat.color.getHexString()}`);
-                    }
-                }
-                // 2. Se não tiver estilo IFC, a cor original ou padrão já está no material
-
-                // 3. Aplica transparência do estilo visual IFC, se disponível
-                if (visualStyle && visualStyle.transparency !== undefined && visualStyle.transparency > 0) {
-                    newMat.transparent = true;
-                    newMat.opacity = 1.0 - visualStyle.transparency;
-                    console.log(`${indent}  ✨ Aplicando transparência IFC: ${newMat.opacity}`);
+                if (mat.color && mat.color.getHex() !== 0xffffff && mat.color.getHex() !== 0xcccccc) {
+                    // Se já tem cor válida, usa
+                    materialColor.copy(mat.color);
+                    console.log(`${indent}  ✅ Cor existente: #${materialColor.getHexString()}`);
                 } else {
-                    // Se o material original já era transparente, mantém
-                    if (mat.transparent) {
-                        newMat.transparent = true;
-                        newMat.opacity = mat.opacity;
-                    }
+                    // Usa cor padrão baseada no tipo IFC
+                    const defaultMat = ifcTypeMaterialDefaults[ifcTypeName] || ifcTypeMaterialDefaults['DEFAULT'];
+                    materialColor.setHex(defaultMat.color);
+                    console.log(`${indent}  🎨 Aplicando cor padrão para ${ifcTypeName}: #${materialColor.getHexString()}`);
                 }
                 
-                // 4. Aplica propriedades padrão por tipo IFC, mas *não sobrescreve* cor/transparência já definidas
+                // Obtém propriedades padrão do tipo
                 const defaultMat = ifcTypeMaterialDefaults[ifcTypeName] || ifcTypeMaterialDefaults['DEFAULT'];
                 
-                // Apenas aplica metalness e roughness se não estiverem definidas no material original
-                if (newMat.metalness === undefined || newMat.metalness === 0.5) { // 0.5 é o padrão de THREE
-                    newMat.metalness = defaultMat.metalness;
+                // Se já é Standard, atualiza
+                if (mat.type === 'MeshStandardMaterial') {
+                    mat.color.copy(materialColor);
+                    mat.metalness = defaultMat.metalness;
+                    mat.roughness = defaultMat.roughness;
+                    if (defaultMat.transparent) {
+                        mat.transparent = true;
+                        mat.opacity = defaultMat.opacity;
+                    }
+                    mat.needsUpdate = true;
+                    return mat;
                 }
-                if (newMat.roughness === undefined || newMat.roughness === 0.5) { // 0.5 é o padrão de THREE
-                    newMat.roughness = defaultMat.roughness;
+                
+                // Cria novo material Standard
+                const newMat = new THREE.MeshStandardMaterial({
+                    color: materialColor,
+                    metalness: defaultMat.metalness,
+                    roughness: defaultMat.roughness,
+                    transparent: defaultMat.transparent || mat.transparent || false,
+                    opacity: defaultMat.opacity || mat.opacity || 1.0,
+                    side: THREE.DoubleSide,
+                    flatShading: false,
+                    vertexColors: false,
+                    envMapIntensity: 0.5
+                });
+                
+                // Preserva propriedades especiais do material original
+                if (mat.emissive && mat.emissive.getHex() !== 0x000000) {
+                    newMat.emissive.copy(mat.emissive);
+                    newMat.emissiveIntensity = mat.emissiveIntensity || 0;
+                }
+                
+                // Preserva texturas
+                if (mat.map) {
+                    newMat.map = mat.map;
+                    newMat.map.colorSpace = THREE.SRGBColorSpace;
+                    newMat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                }
+                if (mat.normalMap) newMat.normalMap = mat.normalMap;
+                if (mat.roughnessMap) newMat.roughnessMap = mat.roughnessMap;
+                if (mat.metalnessMap) newMat.metalnessMap = mat.metalnessMap;
+                if (mat.aoMap) {
+                    newMat.aoMap = mat.aoMap;
+                    newMat.aoMapIntensity = 1.0;
+                }
+                if (mat.bumpMap) {
+                    newMat.bumpMap = mat.bumpMap;
+                    newMat.bumpScale = mat.bumpScale || 1;
                 }
                 
                 newMat.needsUpdate = true;
+                
+                console.log(`${indent}  ✅ Material final: #${newMat.color.getHexString()}`);
+                
                 return newMat;
             });
             
             object.material = Array.isArray(object.material) ? newMaterials : newMaterials[0];
             
+            // Adiciona bordas
             addEdgesToMesh(object);
             
+            // Atualiza geometria
             if (object.geometry) {
                 object.geometry.computeVertexNormals();
             }
         }
         
+        // Ativa sombras
         object.castShadow = true;
         object.receiveShadow = true;
     }
     
+    // Processa filhos recursivamente
     if (object.children && object.children.length > 0) {
         console.log(`${indent}📁 Grupo: ${object.name || 'sem nome'} (${object.children.length} filhos)`);
         for (const child of object.children) {
@@ -478,25 +408,73 @@ document.getElementById("fileInput").addEventListener("change", async (event) =>
             url,
             async (ifcModel) => {
                 loadedModel = ifcModel;
+                
+                // Obtém ID do modelo IFC
                 currentModelID = ifcModel.modelID || 0;
                 
                 console.log('🎨 ===== PROCESSANDO COM PROPRIEDADES IFC =====');
                 console.log('🆔 Model ID:', currentModelID);
                 
+                // Processa com extração de propriedades IFC
                 await processAllMeshesWithIFC(ifcModel, currentModelID, 0);
                 
+                // Adiciona à cena
                 scene.add(ifcModel);
                 scene.add(edgesGroup);
                 
+                // Estatísticas
                 let meshCount = 0;
+                let groupCount = 0;
+                const finalColors = new Map();
+                const ifcTypes = new Map();
+                
                 ifcModel.traverse((child) => {
-                    if (child.isMesh) meshCount++;
+                    if (child.isMesh) {
+                        meshCount++;
+                        
+                        // Coleta tipos IFC
+                        const expressID = child.userData?.expressID || child.expressID;
+                        if (expressID) {
+                            const typeName = child.userData?.ifcType || 'UNKNOWN';
+                            ifcTypes.set(typeName, (ifcTypes.get(typeName) || 0) + 1);
+                        }
+                        
+                        if (child.material) {
+                            const mats = Array.isArray(child.material) ? child.material : [child.material];
+                            mats.forEach(mat => {
+                                if (mat.color) {
+                                    const hex = '#' + mat.color.getHexString();
+                                    finalColors.set(hex, (finalColors.get(hex) || 0) + 1);
+                                }
+                            });
+                        }
+                    } else if (child.isGroup || child.isObject3D) {
+                        groupCount++;
+                    }
                 });
+                
+                console.log('🎨 ===== RESULTADO FINAL =====');
+                console.log(`📦 Meshes: ${meshCount}`);
+                console.log(`📁 Grupos: ${groupCount}`);
+                console.log(`🎨 Cores únicas: ${finalColors.size}`);
+                console.log(`📐 Bordas: ${edgesGroup.children.length}`);
+                
+                console.log('\n🏗️ Tipos IFC encontrados:');
+                ifcTypes.forEach((count, type) => {
+                    console.log(`  ${type}: ${count}x`);
+                });
+                
+                console.log('\n🎨 Distribuição de cores:');
+                finalColors.forEach((count, color) => {
+                    console.log(`  ${color}: ${count}x`);
+                });
+                
+                console.log('================================');
                 
                 fitCameraToModel(ifcModel);
                 
                 document.getElementById('modelName').textContent = file.name;
-                document.getElementById('meshCount').textContent = `${meshCount} objetos`;
+                document.getElementById('meshCount').textContent = `${meshCount} objetos (${finalColors.size} cores)`;
                 
                 loading.classList.remove('show');
                 info.classList.add('show');
