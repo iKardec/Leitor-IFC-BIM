@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BIM IFC Viewer PRO - Alpha 0.0.1 </title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<script type="importmap">   
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/",
+            "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/",
+            "three/examples/jsm/utils/BufferGeometryUtils": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/utils/BufferGeometryUtils.js",
+            "web-ifc": "https://cdn.jsdelivr.net/npm/web-ifc@0.0.53/web-ifc-api.js",
+            "web-ifc-three": "https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.122/IFCLoader.js"
+        }
+    }
+</script>
+
+  <div id="ui">
+    <div id="title">🏗️ BIM IFC Viewer PRO - Alpha 0.0.1</div>
+    <div id="subtitle">Alan Kardec Lima Campos Júnior</div>
+    <div id="subtitle2">© 2025</div>
+    <div class="file-input-wrapper">
+      <input type="file" id="fileInput" accept=".ifc" />
+      <label for="fileInput" class="file-input-label">📁 Carregar arquivo IFC</label>
+    </div>
+    <div id="info">
+      <strong>Instruções:</strong><br>
+      • Arraste para rotacionar<br>
+      • Scroll para zoom<br>
+      • Clique direito para mover<br>
+      • Aguarde o carregamento completo
+    </div>
+  </div>
+  
+  <div id="loading">
+    <div class="spinner"></div>
+    <div id="loadingText">Processando modelo IFC...</div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressBar"></div>
+    </div>
+    <small style="color: #aaa; font-size: 12px;">Pode levar alguns segundos</small>
+  </div>
+
+  <div id="stats">
+    <strong>Modelo:</strong> <span id="modelName">-</span><br>
+    <strong>Objetos:</strong> <span id="meshCount">0</span>
+  </div>
+  
+  <div id="viewer"></div>
+
+
+    <footer class="footer">
+    <p>© 2025 Alan Kardec Lima Campos Júnior</p>
+    <p class="footer-location">Salvador - BA | Brazil</p>
+    </footer>
+
+    <script type="module" src="script.js"></script>
+
+
+
+</body>
+</html>
