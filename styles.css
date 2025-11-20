@@ -11,6 +11,15 @@ body {
     background: linear-gradient(135deg, #0e1117 0%, #1a1f2e 100%);
 }
 
+.logo {
+    position: relative ;
+    width: 30px;
+    height: 30px;
+    margin-top: 20px;
+    box-shadow: #ffffff7e;
+}
+
+
 #viewer { 
     width: 100vw; 
     height: 100vh;

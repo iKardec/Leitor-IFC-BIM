@@ -1,0 +1,361 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { IFCLoader } from 'web-ifc-three';
+
+const container = document.getElementById("viewer");
+const loading = document.getElementById("loading");
+const loadingText = document.getElementById("loadingText");
+const progressBar = document.getElementById("progressBar");
+const info = document.getElementById("info");
+const stats = document.getElementById("stats");
+
+console.log('🚀 Three.js carregado, versão:', THREE.REVISION);
+
+// Cena
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1f2e);
+
+// Câmera
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(20, 20, 20);
+
+// Renderer
+const renderer = new THREE.WebGLRenderer({ 
+    antialias: true, 
+    alpha: true,
+    powerPreference: "high-performance"
+});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.outputEncoding = THREE.sRGBEncoding;
+container.appendChild(renderer.domElement);
+
+// Controles
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 1;
+controls.maxDistance = 500;
+
+// Grid e Eixos
+const gridHelper = new THREE.GridHelper(100, 100, 0x4488ff, 0x223344);
+scene.add(gridHelper);
+const axesHelper = new THREE.AxesHelper(10);
+scene.add(axesHelper);
+
+// Iluminação
+// Luz ambiente suave
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+// Luz hemisférica para iluminação natural
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.5));
+
+// Luz direcional principal com sombras detalhadas
+const light1 = new THREE.DirectionalLight(0xffffff, 1.2);
+light1.position.set(50, 80, 50);
+light1.castShadow = true;
+light1.shadow.mapSize.width = 2048;
+light1.shadow.mapSize.height = 2048;
+light1.shadow.camera.near = 0.5;
+light1.shadow.camera.far = 500;
+light1.shadow.camera.left = -100;
+light1.shadow.camera.right = 100;
+light1.shadow.camera.top = 100;
+light1.shadow.camera.bottom = -100;
+light1.shadow.bias = -0.0001;
+scene.add(light1);
+
+// Luz de preenchimento
+const light2 = new THREE.DirectionalLight(0xffffff, 0.5);
+light2.position.set(-50, 40, -50);
+scene.add(light2);
+
+// Luz de destaque
+const light3 = new THREE.DirectionalLight(0xffeedd, 0.3);
+light3.position.set(0, 50, -100);
+scene.add(light3);
+
+// IFC Loader - Configuração corrigida
+const ifcLoader = new IFCLoader();
+try {
+    if (ifcLoader.ifcManager && ifcLoader.ifcManager.setWasmPath) {
+        ifcLoader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.53/');
+        
+        // Ativa extração de geometrias e propriedades
+        if (ifcLoader.ifcManager.setupThreeMeshBVH) {
+            ifcLoader.ifcManager.setupThreeMeshBVH();
+        }
+        
+        console.log('✅ WASM path configurado');
+    } else {
+        console.log('⚠️ ifcManager não disponível, usando fallback');
+    }
+} catch (e) {
+    console.log('⚠️ Erro ao configurar WASM:', e.message);
+}
+
+// Carregador de texturas
+const textureLoader = new THREE.TextureLoader();
+
+let loadedModel = null;
+
+// Cubo demo
+let demoCube = new THREE.Mesh(
+    new THREE.BoxGeometry(5, 5, 5),
+    new THREE.MeshStandardMaterial({ color: 0x0066ff, metalness: 0.3, roughness: 0.6 })
+);
+demoCube.position.y = 2.5;
+demoCube.castShadow = true;
+demoCube.receiveShadow = true;
+scene.add(demoCube);
+
+const edges = new THREE.EdgesGeometry(demoCube.geometry);
+demoCube.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff })));
+
+console.log('🚀 BIM Viewer PRO pronto!');
+info.classList.add('show');
+
+// Animação
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+}
+animate();
+
+// Resize
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Função para gerar texture UV se não existir
+function ensureUVs(geometry) {
+    if (!geometry.attributes.uv) {
+        console.log('⚠️ Gerando UVs automaticamente');
+        const pos = geometry.attributes.position;
+        const uvs = [];
+        
+        for (let i = 0; i < pos.count; i++) {
+            uvs.push(
+                (pos.getX(i) % 10) / 10,
+                (pos.getY(i) % 10) / 10
+            );
+        }
+        
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    }
+}
+
+// Função centralizar
+function fitCameraToModel(model) {
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    
+    gridHelper.position.y = box.min.y - 0.1;
+    
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = camera.fov * (Math.PI / 180);
+    let cameraZ = Math.abs(maxDim / Math.tan(fov / 2)) * 2.5;
+    
+    camera.position.set(
+        center.x + cameraZ * 0.5,
+        center.y + cameraZ * 0.5,
+        center.z + cameraZ * 0.5
+    );
+    
+    controls.target.copy(center);
+    controls.update();
+    
+    console.log('📦 Dimensões:', size, '📍 Centro:', center);
+}
+
+// Carregar IFC
+document.getElementById("fileInput").addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (loadedModel) {
+        scene.remove(loadedModel);
+        loadedModel = null;
+    }
+
+    // Remove o cubo demo quando carregar IFC
+    if (demoCube) {
+        scene.remove(demoCube);
+        demoCube = null;
+    }
+
+    loading.classList.add('show');
+    info.classList.remove('show');
+    stats.classList.remove('show');
+    progressBar.style.width = '0%';
+
+    try {
+        const url = URL.createObjectURL(file);
+        console.log('🔄 Carregando:', file.name, '| Tamanho:', (file.size / 1024).toFixed(2), 'KB');
+        
+        ifcLoader.load(
+            url,
+            (ifcModel) => {
+                loadedModel = ifcModel;
+                scene.add(ifcModel);
+                
+                // DEBUG: Lista todos os materiais encontrados
+                console.log('🔍 DEBUG - Analisando modelo IFC:');
+                let materialDebugCount = 0;
+                ifcModel.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        const mat = Array.isArray(child.material) ? child.material[0] : child.material;
+                        materialDebugCount++;
+                        console.log(`Material ${materialDebugCount}:`, {
+                            name: mat.name,
+                            color: mat.color ? '#' + mat.color.getHexString() : 'sem cor',
+                            type: mat.type,
+                            hasMap: !!mat.map,
+                            opacity: mat.opacity,
+                            transparent: mat.transparent
+                        });
+                    }
+                });
+                
+                let meshCount = 0;
+                const materialsProcessed = new Map();
+
+                ifcModel.traverse((child) => {
+                    if (child.isMesh) {
+                        meshCount++;
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        
+                        // Garante que existe UV mapping
+                        if (child.geometry) {
+                            ensureUVs(child.geometry);
+                        }
+                        
+                        // Processa materiais PRESERVANDO tudo do original
+                        if (child.material) {
+                            const processMaterial = (mat) => {
+                                const matId = mat.uuid;
+                                
+                                // Se já processou, reutiliza
+                                if (materialsProcessed.has(matId)) {
+                                    return materialsProcessed.get(matId);
+                                }
+                                
+                                // CRÍTICO: Clona o material original ao invés de criar novo
+                                let newMat;
+                                
+                                // Tenta clonar mantendo todas as propriedades
+                                if (mat.clone) {
+                                    newMat = mat.clone();
+                                } else {
+                                    // Fallback: cria novo preservando tudo
+                                    newMat = new THREE.MeshStandardMaterial();
+                                    
+                                    // Copia TODAS as propriedades do material original
+                                    if (mat.color) newMat.color.copy(mat.color);
+                                    if (mat.emissive) newMat.emissive.copy(mat.emissive);
+                                    
+                                    newMat.metalness = mat.metalness !== undefined ? mat.metalness : 0.0;
+                                    newMat.roughness = mat.roughness !== undefined ? mat.roughness : 0.5;
+                                    newMat.transparent = mat.transparent || false;
+                                    newMat.opacity = mat.opacity !== undefined ? mat.opacity : 1.0;
+                                    newMat.side = THREE.DoubleSide;
+                                    newMat.flatShading = false;
+                                    
+                                    // Copia todas as texturas
+                                    if (mat.map) {
+                                        newMat.map = mat.map;
+                                        newMat.map.encoding = THREE.sRGBEncoding;
+                                        newMat.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+                                    }
+                                    if (mat.normalMap) {
+                                        newMat.normalMap = mat.normalMap;
+                                        newMat.normalScale = mat.normalScale || new THREE.Vector2(1, 1);
+                                    }
+                                    if (mat.roughnessMap) newMat.roughnessMap = mat.roughnessMap;
+                                    if (mat.metalnessMap) newMat.metalnessMap = mat.metalnessMap;
+                                    if (mat.aoMap) {
+                                        newMat.aoMap = mat.aoMap;
+                                        newMat.aoMapIntensity = mat.aoMapIntensity || 1.0;
+                                    }
+                                    if (mat.emissiveMap) newMat.emissiveMap = mat.emissiveMap;
+                                    if (mat.emissiveIntensity !== undefined) {
+                                        newMat.emissiveIntensity = mat.emissiveIntensity;
+                                    }
+                                    if (mat.bumpMap) {
+                                        newMat.bumpMap = mat.bumpMap;
+                                        newMat.bumpScale = mat.bumpScale || 1;
+                                    }
+                                    if (mat.displacementMap) {
+                                        newMat.displacementMap = mat.displacementMap;
+                                        newMat.displacementScale = mat.displacementScale || 1;
+                                    }
+                                }
+                                
+                                // Melhora apenas as sombras sem alterar aparência
+                                newMat.side = THREE.DoubleSide;
+                                
+                                // Salva para reutilização
+                                materialsProcessed.set(matId, newMat);
+                                
+                                // Log detalhado
+                                const colorHex = newMat.color ? '#' + newMat.color.getHexString() : 'n/a';
+                                console.log(`🎨 Material processado: ${mat.name || 'sem nome'} | Cor: ${colorHex} | Maps: ${mat.map ? '✅' : '❌'}`);
+                                
+                                return newMat;
+                            };
+                            
+                            // Processa array de materiais ou material único
+                            if (Array.isArray(child.material)) {
+                                child.material = child.material.map(mat => processMaterial(mat));
+                            } else {
+                                child.material = processMaterial(child.material);
+                            }
+                        }
+                    }
+                });
+
+                console.log(`🎉 Processamento completo!`);
+                console.log(`📦 Total de meshes: ${meshCount}`);
+                console.log(`🎨 Total de materiais únicos: ${materialsProcessed.size}`);
+                
+                fitCameraToModel(ifcModel);
+                
+                document.getElementById('modelName').textContent = file.name;
+                document.getElementById('meshCount').textContent = `${meshCount} (${materialsProcessed.size} materiais)`;
+                
+                loading.classList.remove('show');
+                info.classList.add('show');
+                stats.classList.add('show');
+                
+                console.log('🎉 Completo! Meshes:', meshCount);
+                URL.revokeObjectURL(url);
+            },
+            (progress) => {
+                if (progress.total > 0) {
+                    const percent = (progress.loaded / progress.total) * 100;
+                    progressBar.style.width = percent + '%';
+                    loadingText.textContent = `Carregando: ${percent.toFixed(0)}%`;
+                }
+            },
+            (error) => {
+                console.error('❌ Erro:', error);
+                loading.classList.remove('show');
+                alert('Erro ao carregar IFC: ' + error.message);
+                URL.revokeObjectURL(url);
+            }
+        );
+    } catch (error) {
+        console.error('❌ Erro crítico:', error);
+        loading.classList.remove('show');
+        alert('Erro: ' + error.message);
+    }
+});

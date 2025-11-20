@@ -20,11 +20,18 @@ const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerH
 camera.position.set(20, 20, 20);
 
 // Renderer
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ 
+    antialias: true, 
+    alpha: true,
+    powerPreference: "high-performance"
+});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 container.appendChild(renderer.domElement);
 
 // Controles
@@ -40,22 +47,42 @@ scene.add(gridHelper);
 const axesHelper = new THREE.AxesHelper(10);
 scene.add(axesHelper);
 
-// Iluminação
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const light1 = new THREE.DirectionalLight(0xffffff, 0.8);
-light1.position.set(50, 50, 50);
-light1.castShadow = true;
-scene.add(light1);
-const light2 = new THREE.DirectionalLight(0xffffff, 0.4);
-light2.position.set(-50, 50, -50);
-scene.add(light2);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.4));
+// Iluminação mais forte
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.8));
 
-// IFC Loader - Configuração corrigida
+const light1 = new THREE.DirectionalLight(0xffffff, 0.8);
+light1.position.set(50, 80, 50);
+light1.castShadow = true;
+light1.shadow.mapSize.width = 2048;
+light1.shadow.mapSize.height = 2048;
+light1.shadow.camera.near = 0.5;
+light1.shadow.camera.far = 500;
+light1.shadow.camera.left = -100;
+light1.shadow.camera.right = 100;
+light1.shadow.camera.top = 100;
+light1.shadow.camera.bottom = -100;
+light1.shadow.bias = -0.0001;
+scene.add(light1);
+
+const light2 = new THREE.DirectionalLight(0xffffff, 0.3);
+light2.position.set(-50, 40, -50);
+scene.add(light2);
+
+const light3 = new THREE.DirectionalLight(0xffeedd, 0.2);
+light3.position.set(0, 50, -100);
+scene.add(light3);
+
+// IFC Loader
 const ifcLoader = new IFCLoader();
 try {
     if (ifcLoader.ifcManager && ifcLoader.ifcManager.setWasmPath) {
         ifcLoader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.53/');
+        
+        if (ifcLoader.ifcManager.setupThreeMeshBVH) {
+            ifcLoader.ifcManager.setupThreeMeshBVH();
+        }
+        
         console.log('✅ WASM path configurado');
     } else {
         console.log('⚠️ ifcManager não disponível, usando fallback');
@@ -121,6 +148,82 @@ function fitCameraToModel(model) {
     console.log('📦 Dimensões:', size, '📍 Centro:', center);
 }
 
+// Função para converter materiais com força bruta
+function convertMaterialsRecursive(object) {
+    if (object.isMesh && object.material) {
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        
+        const newMaterials = materials.map(mat => {
+            // Se já for Standard, apenas ajusta
+            if (mat.type === 'MeshStandardMaterial') {
+                mat.needsUpdate = true;
+                return mat;
+            }
+            
+            // Extrai cor ANTES de qualquer coisa
+            const originalColor = new THREE.Color();
+            if (mat.color) {
+                originalColor.copy(mat.color);
+            }
+            
+            console.log(`🔄 Convertendo material | Cor original: #${originalColor.getHexString()} | Tipo: ${mat.type}`);
+            
+            // Cria novo material forçando a cor
+            const newMat = new THREE.MeshStandardMaterial({
+                color: originalColor,
+                metalness: 0.0,
+                roughness: 0.8,
+                transparent: mat.transparent || false,
+                opacity: mat.opacity !== undefined ? mat.opacity : 1.0,
+                side: THREE.DoubleSide,
+                flatShading: false,
+                vertexColors: false // Desabilita cores por vértice
+            });
+            
+            // Força a cor novamente (garantia dupla)
+            newMat.color.copy(originalColor);
+            
+            // Preserva emissive
+            if (mat.emissive) {
+                newMat.emissive.copy(mat.emissive);
+                newMat.emissiveIntensity = mat.emissiveIntensity || 0;
+            }
+            
+            // Preserva texturas
+            if (mat.map) {
+                newMat.map = mat.map;
+                newMat.map.colorSpace = THREE.SRGBColorSpace;
+            }
+            if (mat.normalMap) newMat.normalMap = mat.normalMap;
+            if (mat.roughnessMap) newMat.roughnessMap = mat.roughnessMap;
+            if (mat.metalnessMap) newMat.metalnessMap = mat.metalnessMap;
+            if (mat.aoMap) {
+                newMat.aoMap = mat.aoMap;
+                newMat.aoMapIntensity = 1.0;
+            }
+            
+            newMat.needsUpdate = true;
+            
+            console.log(`✅ Material convertido | Nova cor: #${newMat.color.getHexString()}`);
+            
+            return newMat;
+        });
+        
+        // Aplica novos materiais
+        object.material = Array.isArray(object.material) ? newMaterials : newMaterials[0];
+        
+        // Força atualização da geometria
+        if (object.geometry) {
+            object.geometry.computeBoundingSphere();
+        }
+    }
+    
+    // Recursivo nos filhos
+    if (object.children) {
+        object.children.forEach(child => convertMaterialsRecursive(child));
+    }
+}
+
 // Carregar IFC
 document.getElementById("fileInput").addEventListener("change", async (event) => {
     const file = event.target.files[0];
@@ -131,7 +234,6 @@ document.getElementById("fileInput").addEventListener("change", async (event) =>
         loadedModel = null;
     }
 
-    // Remove o cubo demo quando carregar IFC
     if (demoCube) {
         scene.remove(demoCube);
         demoCube = null;
@@ -150,55 +252,55 @@ document.getElementById("fileInput").addEventListener("change", async (event) =>
             url,
             (ifcModel) => {
                 loadedModel = ifcModel;
+                
+                console.log('🎨 ===== INICIANDO CONVERSÃO FORÇADA =====');
+                
+                // Converte TODOS os materiais recursivamente
+                convertMaterialsRecursive(ifcModel);
+                
+                // Adiciona à cena DEPOIS da conversão
                 scene.add(ifcModel);
                 
+                // Conta meshes e cores finais
                 let meshCount = 0;
+                const finalColors = new Map();
+                
                 ifcModel.traverse((child) => {
                     if (child.isMesh) {
                         meshCount++;
                         child.castShadow = true;
                         child.receiveShadow = true;
                         
-                        // Preserva materiais originais do IFC
                         if (child.material) {
-                            // Se for array de materiais (multi-material)
-                            if (Array.isArray(child.material)) {
-                                child.material = child.material.map(mat => {
-                                    return new THREE.MeshStandardMaterial({
-                                        color: mat.color || 0xffffff,
-                                        metalness: 0.1,
-                                        roughness: 0.7,
-                                        side: THREE.DoubleSide,
-                                        transparent: mat.transparent || false,
-                                        opacity: mat.opacity || 1.0
-                                    });
-                                });
-                            } else {
-                                // Material único
-                                const originalColor = child.material.color ? child.material.color.clone() : new THREE.Color(0xcccccc);
-                                child.material = new THREE.MeshStandardMaterial({
-                                    color: originalColor,
-                                    metalness: 0.1,
-                                    roughness: 0.7,
-                                    side: THREE.DoubleSide,
-                                    transparent: child.material.transparent || false,
-                                    opacity: child.material.opacity || 1.0
-                                });
-                            }
+                            const mats = Array.isArray(child.material) ? child.material : [child.material];
+                            mats.forEach(mat => {
+                                if (mat.color) {
+                                    const hex = '#' + mat.color.getHexString();
+                                    finalColors.set(hex, (finalColors.get(hex) || 0) + 1);
+                                }
+                            });
                         }
                     }
                 });
                 
+                console.log('🎨 ===== RESULTADO FINAL =====');
+                console.log(`📦 Meshes: ${meshCount}`);
+                console.log(`🎨 Cores finais: ${finalColors.size}`);
+                finalColors.forEach((count, color) => {
+                    console.log(`  ${color}: ${count}x`);
+                });
+                console.log('==============================');
+                
                 fitCameraToModel(ifcModel);
                 
                 document.getElementById('modelName').textContent = file.name;
-                document.getElementById('meshCount').textContent = meshCount;
+                document.getElementById('meshCount').textContent = `${meshCount} (${finalColors.size} cores)`;
                 
                 loading.classList.remove('show');
                 info.classList.add('show');
                 stats.classList.add('show');
                 
-                console.log('🎉 Completo! Meshes:', meshCount);
+                console.log('🎉 Carregamento completo!');
                 URL.revokeObjectURL(url);
             },
             (progress) => {
